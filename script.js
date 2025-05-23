@@ -15,7 +15,6 @@ let player = {
 
 // Click indicator properties
 let clickIndicators = [];
-const INDICATOR_LIFETIME = 1000; // milliseconds
 const INDICATOR_MAX_DISTANCE_COLOR = 300; // pixels, for color transition
 const INDICATOR_ARROW_SIZE = 8;
 const INDICATOR_ARROW_OFFSET = 15;
@@ -43,12 +42,15 @@ canvas.addEventListener('mousedown', function(event) {
     player.targetY = event.clientY - rect.top;
 
     // Add a new click indicator
-    clickIndicators.push({
-        x: player.targetX,
-        y: player.targetY,
-        startTime: Date.now(),
-        initialDistance: Math.sqrt(Math.pow(player.targetX - player.x, 2) + Math.pow(player.targetY - player.y, 2))
-    });
+    const initialDist = Math.sqrt(Math.pow(player.targetX - player.x, 2) + Math.pow(player.targetY - player.y, 2));
+    // Only add indicator if the click is not right on the player
+    if (initialDist > player.speed) { // Avoid adding indicator if click is too close
+        clickIndicators.push({
+            x: player.targetX,
+            y: player.targetY,
+            initialDistance: initialDist
+        });
+    }
 });
 
 function drawPlayer() {
@@ -84,15 +86,17 @@ function drawPlayer() {
 }
 
 function drawClickIndicator(indicator) {
-    const elapsedTime = Date.now() - indicator.startTime;
-    if (elapsedTime > INDICATOR_LIFETIME) {
+    const currentDistanceToPlayer = Math.sqrt(Math.pow(indicator.x - player.x, 2) + Math.pow(indicator.y - player.y, 2));
+
+    // Remove indicator if player is very close to its target, or if initial distance was negligible
+    if (currentDistanceToPlayer < player.speed || indicator.initialDistance < player.speed) {
         return false; // Indicate that it should be removed
     }
 
-    const currentDistanceToPlayer = Math.sqrt(Math.pow(indicator.x - player.x, 2) + Math.pow(indicator.y - player.y, 2));
-
-    // Calculate opacity (fades out)
-    const opacity = 1 - (elapsedTime / INDICATOR_LIFETIME);
+    // Calculate opacity based on remaining distance relative to initial distance.
+    // Opacity is 1 when currentDistance is initialDistance, and 0 when currentDistance is 0.
+    let opacity = currentDistanceToPlayer / indicator.initialDistance;
+    opacity = Math.min(1, Math.max(0, opacity)); // Clamp opacity between 0 and 1
 
     // Calculate color (red to green based on player proximity)
     // Lerp factor: 0 means far (red), 1 means close (green)
@@ -104,7 +108,7 @@ function drawClickIndicator(indicator) {
     const r = Math.floor(255 * (1 - colorFactor));
     const g = Math.floor(255 * colorFactor);
     const b = 0;
-    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`; // USE NEW OPACITY
     ctx.lineWidth = 2;
 
     // Draw 4 arrows pointing inwards
