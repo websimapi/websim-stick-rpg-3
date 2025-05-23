@@ -5,13 +5,13 @@ const ctx = canvas.getContext('2d');
 let player = {
     x: canvas.width / 2,
     y: canvas.height / 2,
-    targetX: canvas.width / 2,
-    targetY: canvas.height / 2,
     speed: 2, // pixels per frame
     headRadius: 15,
     bodyLength: 40,
     limbLength: 25
 };
+
+let destinationQueue = []; // Stores {x, y} objects for player path
 
 // Click indicator properties
 let clickIndicators = [];
@@ -23,12 +23,10 @@ const INDICATOR_ARROW_OFFSET = 15;
 function resizeCanvas() {
     canvas.width = window.innerWidth * 0.8;
     canvas.height = window.innerHeight * 0.8;
-    // Re-center player if canvas resizes and they are at the initial position
-    if (player.x === player.targetX && player.y === player.targetY) {
+    // Re-center player if canvas resizes AND player is idle (no destinations)
+    if (destinationQueue.length === 0) {
         player.x = canvas.width / 2;
         player.y = canvas.height / 2;
-        player.targetX = canvas.width / 2;
-        player.targetY = canvas.height / 2;
     }
 }
 
@@ -38,19 +36,26 @@ resizeCanvas(); // Initial resize
 // Handle mouse clicks for movement
 canvas.addEventListener('mousedown', function(event) {
     const rect = canvas.getBoundingClientRect();
-    player.targetX = event.clientX - rect.left;
-    player.targetY = event.clientY - rect.top;
+    const clickedX = event.clientX - rect.left;
+    const clickedY = event.clientY - rect.top;
 
-    // Add a new click indicator
-    const initialDist = Math.sqrt(Math.pow(player.targetX - player.x, 2) + Math.pow(player.targetY - player.y, 2));
-    // Only add indicator if the click is not right on the player
-    if (initialDist > player.speed) { // Avoid adding indicator if click is too close
-        clickIndicators.push({
-            x: player.targetX,
-            y: player.targetY,
-            initialDistance: initialDist
-        });
+    // Calculate initial distance from player's CURRENT position to THIS new click
+    const initialDistForIndicator = Math.sqrt(Math.pow(clickedX - player.x, 2) + Math.pow(clickedY - player.y, 2));
+
+    // Only add if the click is not too close to the player's current position
+    if (initialDistForIndicator <= player.speed) return;
+
+    if (destinationQueue.length >= 3) {
+        destinationQueue.pop(); // Remove the last (newest) destination from the queue
+        clickIndicators.pop();  // Remove its corresponding indicator
     }
+
+    destinationQueue.push({ x: clickedX, y: clickedY });
+    clickIndicators.push({
+        x: clickedX,
+        y: clickedY,
+        initialDistance: initialDistForIndicator // Used for indicator fade relative to this click
+    });
 });
 
 function drawPlayer() {
@@ -141,17 +146,22 @@ function gameLoop() {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Move player towards target
-    const dx = player.targetX - player.x;
-    const dy = player.targetY - player.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    // Move player towards the first target in the queue
+    if (destinationQueue.length > 0) {
+        const currentTarget = destinationQueue[0];
+        const dx = currentTarget.x - player.x;
+        const dy = currentTarget.y - player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (distance > player.speed) {
-        player.x += (dx / distance) * player.speed;
-        player.y += (dy / distance) * player.speed;
-    } else if (distance > 0) { // Snap to target if very close
-        player.x = player.targetX;
-        player.y = player.targetY;
+        if (distance > player.speed) {
+            player.x += (dx / distance) * player.speed;
+            player.y += (dy / distance) * player.speed;
+        } else if (distance > 0) { // Snap to target if very close and remove from queue
+            player.x = currentTarget.x;
+            player.y = currentTarget.y;
+            destinationQueue.shift(); // Remove the reached target
+            // The corresponding click indicator will be removed by the filter in drawClickIndicator
+        }
     }
 
     // --- Drawing code will go here ---
