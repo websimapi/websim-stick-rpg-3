@@ -13,6 +13,13 @@ let player = {
     limbLength: 25
 };
 
+// Click indicator properties
+let clickIndicators = [];
+const INDICATOR_LIFETIME = 1000; // milliseconds
+const INDICATOR_MAX_DISTANCE_COLOR = 300; // pixels, for color transition
+const INDICATOR_ARROW_SIZE = 8;
+const INDICATOR_ARROW_OFFSET = 15;
+
 // Adjust canvas to screen size
 function resizeCanvas() {
     canvas.width = window.innerWidth * 0.8;
@@ -34,6 +41,14 @@ canvas.addEventListener('mousedown', function(event) {
     const rect = canvas.getBoundingClientRect();
     player.targetX = event.clientX - rect.left;
     player.targetY = event.clientY - rect.top;
+
+    // Add a new click indicator
+    clickIndicators.push({
+        x: player.targetX,
+        y: player.targetY,
+        startTime: Date.now(),
+        initialDistance: Math.sqrt(Math.pow(player.targetX - player.x, 2) + Math.pow(player.targetY - player.y, 2))
+    });
 });
 
 function drawPlayer() {
@@ -68,6 +83,55 @@ function drawPlayer() {
     ctx.stroke();
 }
 
+function drawClickIndicator(indicator) {
+    const elapsedTime = Date.now() - indicator.startTime;
+    if (elapsedTime > INDICATOR_LIFETIME) {
+        return false; // Indicate that it should be removed
+    }
+
+    const currentDistanceToPlayer = Math.sqrt(Math.pow(indicator.x - player.x, 2) + Math.pow(indicator.y - player.y, 2));
+
+    // Calculate opacity (fades out)
+    const opacity = 1 - (elapsedTime / INDICATOR_LIFETIME);
+
+    // Calculate color (red to green based on player proximity)
+    // Lerp factor: 0 means far (red), 1 means close (green)
+    let colorFactor = 1 - Math.min(currentDistanceToPlayer / INDICATOR_MAX_DISTANCE_COLOR, 1);
+    if (currentDistanceToPlayer < player.speed * 2) { // If player is very close/at target
+        colorFactor = 1;
+    }
+
+    const r = Math.floor(255 * (1 - colorFactor));
+    const g = Math.floor(255 * colorFactor);
+    const b = 0;
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    ctx.lineWidth = 2;
+
+    // Draw 4 arrows pointing inwards
+    const directions = [
+        { dx: 0, dy: -1 }, // Up
+        { dx: 0, dy: 1 },  // Down
+        { dx: -1, dy: 0 }, // Left
+        { dx: 1, dy: 0 }   // Right
+    ];
+
+    for (const dir of directions) {
+        ctx.beginPath();
+        const startX = indicator.x + dir.dx * INDICATOR_ARROW_OFFSET;
+        const startY = indicator.y + dir.dy * INDICATOR_ARROW_OFFSET;
+        const endX = indicator.x + dir.dx * (INDICATOR_ARROW_OFFSET - INDICATOR_ARROW_SIZE);
+        const endY = indicator.y + dir.dy * (INDICATOR_ARROW_OFFSET - INDICATOR_ARROW_SIZE);
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        // Arrowheads
+        ctx.lineTo(endX - dir.dy * INDICATOR_ARROW_SIZE / 2 + dir.dx * INDICATOR_ARROW_SIZE / 2, endY + dir.dx * INDICATOR_ARROW_SIZE / 2 + dir.dy * INDICATOR_ARROW_SIZE / 2);
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(endX + dir.dy * INDICATOR_ARROW_SIZE / 2 + dir.dx * INDICATOR_ARROW_SIZE / 2, endY - dir.dx * INDICATOR_ARROW_SIZE / 2 + dir.dy * INDICATOR_ARROW_SIZE / 2);
+        ctx.stroke();
+    }
+    return true;
+}
+
 // Game loop
 function gameLoop() {
     // Clear canvas
@@ -88,6 +152,9 @@ function gameLoop() {
 
     // --- Drawing code will go here ---
     drawPlayer();
+
+    // Draw and update click indicators
+    clickIndicators = clickIndicators.filter(indicator => drawClickIndicator(indicator));
 
     // --- Game logic will go here ---
 
